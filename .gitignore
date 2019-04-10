@@ -1,4 +1,5 @@
 # exclude the following
-/node_modules
-config.js
-/logs
+node_modules/*
+config/config.js
+logs/*
+logs/.DS_Store

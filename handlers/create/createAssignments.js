@@ -12,7 +12,7 @@ const token             = config.token
 const csvInput          = `./logs/assignmentCreation`
 
     const writeAssignments = (answers) =>{
-
+        
         prompt(cli.createQuestions)
         .then(answers =>{
             if(answers.csv_upload_confirm){

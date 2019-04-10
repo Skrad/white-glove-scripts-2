@@ -1,4 +1,3 @@
-
 const { prompt }        = require('enquirer');
 const cli               = require("./cli-questions")
 const axios             = require("axios")
@@ -7,42 +6,82 @@ const config            = require ("../../config/config")
 const throttledQueue    = require('throttled-queue');
 const throttle          = throttledQueue(5, 1000, true);
 const token             = config.token
-const csvOutput         = `./logs/find/output.csv`;
-const csvFailed         = `./logs/find/failed.csv`;
 const fs                = require("fs");
+const csv               = require('csvtojson');
+const csvInput          = `./logs/bulkFind/input`
+const csvOutput         = `./logs/bulkFind/bulk-output.csv`;
+const csvFailed         = `./logs/bulkFind/bulk-failed.csv`;
 
-  const getPages = (answers)=>{
-    prompt(cli.findQuestions)
-    .then(answers =>{
+//THIS SCRIPT WILL OUTPUT TO LOGS/FIND. LOOK FOR YOUR OUTPUT FILE THERE.
 
-        let domain          = answers.domain
-        let courseNumber    = answers.courseNumber
-        let searchString    = answers.searchString.toLowerCase()
-        let pageNumber      = 1
+const warning = () => {
+    console.log(`This script will output to ${csvOutput}. Make sure to look for your output file in there`)
+}
 
-        const getPages=()=>{
+const bulk = ( answers ) => {
+    prompt(cli.bulkQuestions)
+    .then(answers => {
+        if(answers.csv_upload_confirm) {
 
-            let headers = {
-                url: `https://${domain}.instructure.com/api/v1/courses/${courseNumber}/pages?per_page=100&page=${pageNumber}`,
-                headers: { Authorization: `Bearer ${token}`}
-            }
+            // setTimeout(warning, 3000);
 
-            axios(headers).then(function(response){
-                pages(response.data, domain, courseNumber, searchString)
-                if(response.data.length ===100){
-                    pageNumber++
-                    getPages()
-                }
-            }).catch(function(error){console.log(error.status)})
+            fs.readdir(csvInput, (err, files) => {
+
+                files.forEach(file => {
+
+                let inputFilePath = `${csvInput}/${file}`
+
+                    csv(answers)
+                    .fromFile(inputFilePath)
+                    .then((courses) => {
+                            courses.forEach( course => {
+                                
+                                throttle(function() { 
+                                    answers.courseNumber = course.canvas_course_id
+                                    pageGet(answers)
+                                })
+                            })
+
+                        })
+                    })
+
+
+
+                    })}
+        else {
+            console.log(`\n\nPlease place the input file in ${csvInput} and run the script again`)
+            process.exit
+        }
+    })
+}
+
+
+const pageGet = (answers) => {
+
+    let domain          = answers.domain
+    let courseNumber    = answers.courseNumber
+    let searchString    = answers.searchString.toLowerCase()
+    let pageNumber      = 1
+
+    //console.log(`Course number: ${courseNumber}`);
+    const get = () => { 
+
+        let headers = {
+            url: `https://${domain}.instructure.com/api/v1/courses/${courseNumber}/pages?per_page=100&page=${pageNumber}`,
+            headers: { Authorization: `Bearer ${token}`}
         }
 
-        getPages()
-
-    })
-    .catch(function(error){console.log(style.color.ansi16m.hex("#EEEE66"), "getPages ERROR: ", style.color.close)
-                console.log(style.color.ansi16m.hex("#EEEE66"), error.response.data, style.color.close)});
-  }
-
+        axios(headers).then(function(response){
+            pages(response.data, domain, courseNumber, searchString)
+            if(response.data.length ===100){
+                pageNumber++
+                get()
+            }
+        }).catch(function(error){console.log(style.color.ansi16m.hex("#EEEE66"), "pageGet ERROR: ", style.color.close)
+                console.log(style.color.ansi16m.hex("#EEEE66"), error.response.data, style.color.close)})
+    }
+    get()
+}
 
 
   const pages =(data, domain, courseNumber, searchString)=>{
@@ -62,18 +101,18 @@ const fs                = require("fs");
         throttle(function() {
             axios(headers).then(function(response){
 
-                console.log(`checking page:  ${pageId}`)
+                console.log(`course ${courseNumber} -- checking page:  ${pageId}`)
 
                 if(response.data.body !== null){
 
                     let body = response.data.body.toLowerCase()
                     let title = response.data.title
                     let url = response.data.html_url
-
+                
                     if(body !== null){
                         let searchIndex = body.indexOf(searchString)
                         if(searchIndex !== -1){
-
+    
                             let searchWord = new RegExp('[^\\s"]*' + searchString + '[^\\s"]*', "g");
                             let matchedWords = body.match(searchWord);
                             console.log(style.color.ansi16m.hex("#E06666"), `Found "${searchString}" at ${url}`, style.color.close)
@@ -95,4 +134,4 @@ const fs                = require("fs");
   }
 
 
-  module.exports = { getPages }
+  module.exports = { bulk }
